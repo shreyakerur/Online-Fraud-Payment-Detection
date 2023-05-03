@@ -1,0 +1,147 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+%matplotlib inline
+import warnings
+warnings.filterwarnings(action='ignore')
+from sklearn.preprocessing import RobustScaler
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from collections import Counter
+
+#undersampling
+from imblearn.under_sampling import NearMiss
+#oversampling
+from imblearn.over_sampling import RandomOverSampler
+#both
+from imblearn.combine import SMOTETomek
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+#For accuracy
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report
+df=pd.read_csv('F:/archive.zip/fraud_detection.csv')
+print(df.shape)
+df.head()
+df.info()
+
+#Checking for null values in our dataset
+df.isnull().sum()
+#Visualization
+df[df['isFraud']==1]
+
+#Countplot of 'type'
+plt.figure(figsize=(7,3))
+plt.title('type vs count')
+sns.countplot(data=df,x='type',palette='coolwarm')
+plt.xlabel('type')
+plt.ylabel('count')
+plt.show()
+
+#Plotting subplot for amount and time column
+fig, ax = plt.subplots(1, 3, figsize=(18,4))
+amt_val = df['amount'].values
+time_val = df['step'].values
+
+sns.distplot(amt_val, ax=ax[1], color='r')
+ax[1].set_title('Distribution of Transaction Amount')
+ax[1].set_xlim([min(amt_val), max(amt_val)])
+
+sns.distplot(time_val, ax=ax[2], color='g')
+ax[2].set_title('Distribution of Transaction time')
+ax[2].set_xlim([min(time_val), max(time_val)])
+plt.show()
+
+#Plotting subplot for amount and time column
+fig, ax = plt.subplots(1, 2, figsize=(18,4))
+amt_val = df['amount'].values
+time_val = df['step'].values
+
+sns.distplot(amt_val, ax=ax[0], color='r')
+ax[0].set_title('Distribution of Transaction Amount')
+ax[0].set_xlim([min(amt_val), max(amt_val)])
+
+sns.distplot(time_val, ax=ax[1], color='g')
+ax[1].set_title('Distribution of Transaction time')
+ax[1].set_xlim([min(time_val), max(time_val)])
+plt.show()
+
+#Countplot of 'isFraud'
+plt.figure(figsize=(7,3))
+plt.title('isFraud vs Count')
+sns.countplot(data=df, x='isFraud', color='g')
+plt.xlabel('isFraud')
+plt.ylabel('Count')
+plt.show()
+df['isFraud'].value_counts()
+
+#Percentage of each category in isFraud column 
+print(df['isFraud'].value_counts()[0]/len(df['isFraud'])*100) #No Fraud
+print(df['isFraud'].value_counts()[1]/len(df['isFraud'])*100) #Fraud
+numerical = ['step','amount','oldbalanceOrg','newbalanceOrig','oldbalanceDest','newbalanceDest']
+def boxplts_vis(data,column):
+    fig, ax = plt.subplots(2, 3, figsize=(18,6))
+    fig.suptitle('Boxplot for each variable',y=1, size=20)
+    ax=ax.flatten()
+    for i, feature in enumerate(column):
+        sns.boxplot(data=data[feature],ax=ax[i], orient='h')
+        ax[i].set_title(feature + 'skewness is: ' + str(round(data[feature].skew(axis=0, skipna = True), 2)), fontsize=15)
+        ax[i].set_xlim([min(data[feature]), max(data[feature])]) 
+boxplts_vis(data=df, column=numerical)
+plt.tight_layout()
+
+#Checking nameOrig and nameDest column from the dataset
+nameOrig = df['nameOrig'].unique()
+print("Unique in nameOrig: ", len(nameOrig))
+print(nameOrig)
+
+nameDest = df['nameDest'].unique()
+print("Unique in nameDest: ",len(nameDest))
+print(nameDest)
+
+#Checking isFlagged column
+df['isFlaggedFraud'].value_counts()
+#Dropping columns not needed
+df.drop(['nameOrig','nameDest','isFlaggedFraud'],axis=1, inplace=True)
+#Applying one hot encoding to type column
+df = pd.get_dummies(data=df,columns=['type'],drop_first=True)
+df.head()
+
+#We use RobustScaler to scale down the numerical features as it is less prone to outliers
+scale=RobustScaler()
+for feature in numerical:
+    df[feature]=scale.fit_transform(df[feature].values.reshape(-1,1))
+df.head()
+
+#MODEL TRAINING
+
+#Splitting our data into independent and dependent features
+x=df.drop('isFraud',axis=1)
+y=df['isFraud']
+x.columns
+df[df['isFraud']==1]
+
+#Feature Importance
+from sklearn.ensemble import ExtraTreesRegressor
+model = ExtraTreesRegressor()
+model.fit(x,y)
+print(model.feature_importances_)
+#plot graph of feature importances for better visualization
+fi = pd.Series(model.feature_importances_, index=x.columns)
+fi.nlargest(10).plot(kind='barh')
+plt.show()
+
+#Doing train_test_split
+X_train,X_test,y_train,y_test = train_test_split(x,y,train_size=0.7)
+#Applying StratifiedKFold
+skf = StratifiedKFold(n_splits = 3, shuffle = False, random_state = None)
+model1 = LogisticRegression()
+param = {'C':10.0 ** np.arange(-1,2)}
+lrs = RandomizedSearchCV(model1, param, cv=skf, n_jobs=-1, scoring='accuracy')
+lrs.fit(X_train,y_train)
+y_pred=lrs.predict(X_test)
+print(confusion_matrix(y_test,y_pred))
+print(accuracy_score(y_test,y_pred))
+print(classification_report(y_test,y_pred))
